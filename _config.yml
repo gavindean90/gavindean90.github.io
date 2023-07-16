@@ -29,7 +29,7 @@ exclude:
   - Rakefile
 
 # GitHub Pages settings
-remote_theme: no-style-please # specify a remote theme, or remove this line if using a local theme
+remote_theme: riggraz/no-style-please # specify a remote theme, or remove this line if using a local theme
 github:
   is_project_page: false # set to true if your site is a project page
   pages:
