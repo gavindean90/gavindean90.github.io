@@ -27,7 +27,7 @@ title: Gavin Dean - Resume
 - Led the adoption of AWS CDK, promoting a GitOps approach to cloud resource management.
 - Introduced and advocated the concept of immutable infrastructure, educating IT teams on container use and adoption.
 - Established and facilitated a weekly DevSecOps Guild meeting to discuss emerging technologies, culture adoption, and promote continuous learning.
-- Lead Privileged Access Management technical team, decreasing risk across IT.
+- Led Privileged Access Management technical team, decreasing risk across IT.
 - Managed and supervised the development of more maintainable Jenkins pipelines.
 
 #### eIRONclad - Systems Engineer
