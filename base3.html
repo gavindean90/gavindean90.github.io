@@ -131,6 +131,60 @@
         <div class="track-info">9. Won 2 1</div>
         <a class="download-link" href="https://base3.deanfam.net/9.%20Won%202%201.m4a" download>Download</a>
     </div>
+<script>
+        document.addEventListener("DOMContentLoaded", function() {
+            // Get all audio elements and control buttons
+            const tracks = document.querySelectorAll("audio");
+            const playPauseButton = document.getElementById("playPauseButton");
+            const nextButton = document.getElementById("nextButton");
+            const prevButton = document.getElementById("prevButton");
 
+            let currentTrackIndex = 0;
+
+            // Function to play the current track
+            function playCurrentTrack() {
+                tracks[currentTrackIndex].play();
+                playPauseButton.textContent = "Pause";
+            }
+
+            // Function to pause the current track
+            function pauseCurrentTrack() {
+                tracks[currentTrackIndex].pause();
+                playPauseButton.textContent = "Play";
+            }
+
+            // Play or pause on button click
+            playPauseButton.addEventListener("click", function() {
+                if (tracks[currentTrackIndex].paused) {
+                    playCurrentTrack();
+                } else {
+                    pauseCurrentTrack();
+                }
+            });
+
+            // Move to the next track
+            nextButton.addEventListener("click", function() {
+                pauseCurrentTrack();
+                currentTrackIndex = (currentTrackIndex + 1) % tracks.length;
+                playCurrentTrack();
+            });
+
+            // Move to the previous track
+            prevButton.addEventListener("click", function() {
+                pauseCurrentTrack();
+                currentTrackIndex = (currentTrackIndex - 1 + tracks.length) % tracks.length;
+                playCurrentTrack();
+            });
+
+            // Automatically play the next track when the current one ends
+            tracks.forEach((track, index) => {
+                track.addEventListener("ended", function() {
+                    if (index === currentTrackIndex) {
+                        nextButton.click();
+                    }
+                });
+            });
+        });
+    </script>
 </body>
 </html>
