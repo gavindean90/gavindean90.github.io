@@ -19,7 +19,8 @@
         .download-link { color: #1db954; text-decoration: none; font-weight: bold; margin-top: 5px; }
         .download-link:hover { text-decoration: underline; }
         button { padding: 10px 20px; margin: 10px; background-color: #1db954; border: none; color: white; cursor: pointer; border-radius: 5px; }
-        button:hover { background-color: #17a74e; }
+        button.disabled { background-color: #555; cursor: not-allowed; }
+        button:hover:not(.disabled) { background-color: #17a74e; }
         input[type="range"] {
             width: 80%;
             height: 5px;
@@ -35,13 +36,13 @@
     <!-- Logo Image -->
     <img src="images/Base3Logo.jpg" alt="Base 3 Logo" class="logo">
 
-    <!-- Autoplay Toggle Button -->
-    <button id="autoplay-toggle">Autoplay: Off</button>
+    <!-- Autoplay Toggle Button (disabled by default for noscript) -->
+    <button id="autoplay-toggle" class="disabled" disabled>Autoplay: Off</button>
 
-    <!-- Navigation Buttons -->
+    <!-- Navigation Buttons (disabled by default for noscript) -->
     <div>
-        <button id="prev">Previous</button>
-        <button id="next">Next</button>
+        <button id="prev" class="disabled" disabled>Previous</button>
+        <button id="next" class="disabled" disabled>Next</button>
     </div>
 
     <!-- Tracks -->
@@ -56,22 +57,28 @@
         <a class="download-link" href="music/Lead_with_Your_Hips.wav" download>Download WAV</a>
     </div>
 
-    <!-- Repeat similar blocks for other tracks -->
-    <!-- Track Example -->
-    <div class="track">
-        <audio controls>
-            <source src="music/Midnight_Attitude.m4a" type="audio/m4a">
-            <source src="music/Midnight_Attitude.wav" type="audio/wav">
-            Your browser does not support the audio element.
-        </audio>
-        <div class="track-info">02. Midnight Attitude</div>
-        <a class="download-link" href="music/Midnight_Attitude.m4a" download>Download M4A</a>
-        <a class="download-link" href="music/Midnight_Attitude.wav" download>Download WAV</a>
-    </div>
+    <!-- Additional tracks as needed -->
 
-    <!-- Add more tracks as needed -->
+    <!-- Fallback message for users with JavaScript disabled -->
+    <noscript>
+        <style>
+            .disabled { display: none; } /* Hide disabled buttons if JavaScript is off */
+        </style>
+        <p style="color: #ff5555; text-align: center; padding: 20px;">
+            JavaScript is disabled in your browser. For the best experience, please enable JavaScript to use autoplay and navigation controls.
+        </p>
+    </noscript>
 
+    <!-- JavaScript for enhanced controls -->
     <script>
+        // Enable buttons when JavaScript is available
+        document.getElementById('autoplay-toggle').classList.remove('disabled');
+        document.getElementById('autoplay-toggle').disabled = false;
+        document.getElementById('prev').classList.remove('disabled');
+        document.getElementById('prev').disabled = false;
+        document.getElementById('next').classList.remove('disabled');
+        document.getElementById('next').disabled = false;
+
         let autoplay = false;
         const autoplayToggle = document.getElementById('autoplay-toggle');
         const tracks = document.querySelectorAll('.track audio');
