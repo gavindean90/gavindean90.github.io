@@ -3,6 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta property="og:title" content="Base 3 - Album Player">
+    <meta property="og:description" content="Listen to the tracks from Gavin's album 'Base 3' online.">
+    <meta property="og:image" content="images/Base3Logo.jpg">
+
     <title>Base 3 - Album Player</title>
     <style>
         body { font-family: Arial, sans-serif; margin: 0; padding: 0; display: flex; flex-direction: column; align-items: center; background-color: #222; color: #fff; }
@@ -118,6 +122,21 @@
         <a class="download-link" href="music/Won_2_1.m4a" download>Download M4A</a>
         <a class="download-link" href="music/Won_2_1.wav" download>Download WAV</a>
     </div>
+  <script>
+    // Get all audio elements in the order they appear on the page
+    const tracks = document.querySelectorAll('.track audio');
+
+    tracks.forEach((track, index) => {
+        // Add an event listener to play the next track when the current one ends
+        track.addEventListener('ended', () => {
+            const nextTrack = tracks[index + 1];
+            if (nextTrack) {
+                nextTrack.play();
+            }
+        });
+    });
+  </script>
+
 </body>
 </html>
 
