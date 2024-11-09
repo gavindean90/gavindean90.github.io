@@ -15,9 +15,6 @@
         .track { width: 90%; margin: 10px 0; padding: 10px; background: #333; border-radius: 5px; display: flex; flex-direction: column; align-items: center; }
         .track.active { border: 2px solid #1db954; background: #444; }
         .track audio { width: 100%; }
-        .track { cursor: pointer; } /* Make track area clickable */
-        .track:active { background: #555; } /* Click feedback */
-        .track audio { width: 100%; display: none; } /* Hide default audio controls */
         .track-info { margin-top: 8px; }
         .download-link { color: #1db954; text-decoration: none; font-weight: bold; margin-top: 5px; }
         .download-link:hover { text-decoration: underline; }
@@ -205,10 +202,6 @@
                 if (autoplay) playTrack(index + 1);
             });
         });
-
-        .track { cursor: pointer; } /* Make track area clickable */
-.track:active { background: #555; } /* Click feedback */
-.track audio { width: 100%; display: none; } /* Hide default audio controls */
     </script>
 </body>
 </html>
