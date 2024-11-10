@@ -196,6 +196,7 @@
             track.addEventListener('play', () => {
                 trackContainers.forEach(t => t.classList.remove('active'));
                 trackContainers[index].classList.add('active');
+                currentIndex = index; // Update currentIndex to the currently playing track
             });
 
             track.addEventListener('ended', () => {
@@ -203,5 +204,8 @@
             });
         });
     </script>
-</body>
+    <footer style="margin-top: 20px; color: #888; font-size: 0.8em;">
+        Version 1.0.0
+    </footer>
 </html>
+
