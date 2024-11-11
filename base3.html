@@ -149,12 +149,22 @@
             .disabled { display: none; } /* Hide disabled buttons if JavaScript is off */
         </style>
         <p style="color: #ff5555; text-align: center; padding: 20px;">
-            JavaScript is disabled in your browser. For the best experience, please enable JavaScript to use autoplay and navigation controls.
+            JavaScript is disabled in your browser. That's cool. There is some audio player controls
+            I built but the page should work without JavaScript.
         </p>
     </noscript>
 
     <!-- JavaScript for enhanced controls -->
     <script>
+       if ('serviceWorker' in navigator) {
+         navigator.serviceWorker.register('/script/sw.js')
+             .then((registration) => {
+                 console.log('Service Worker registered with scope:', registration.scope);
+             })
+             .catch((error) => {
+                 console.log('Service Worker registration failed:', error);
+             });
+        }
         // Enable buttons when JavaScript is available
         console.log('Enabling buttons...');
         document.getElementById('autoplay-toggle').classList.remove('disabled');
