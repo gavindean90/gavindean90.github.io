@@ -22,38 +22,47 @@ self.addEventListener('install', (event) => {
         caches.open(CACHE_NAME)
             .then((cache) => {
                 console.log('Opened cache');
-                return cache.addAll(urlsToCache);
+                return Promise.all(
+                    urlsToCache.map(url => 
+                        cache.add(url)
+                            .then(() => console.log(`Successfully cached ${url}`))
+                            .catch(error => console.error(`Failed to cache ${url}:`, error))
+                    )
+                );
             })
     );
 });
 
 self.addEventListener('fetch', (event) => {
+    console.log(`Fetching ${event.request.url}`);
     event.respondWith(
         caches.match(event.request)
             .then((response) => {
-                // Cache hit - return the response from the cache
                 if (response) {
-                    console.log("cache hit");
+                    console.log(`Cache hit for ${event.request.url}`);
                     return response;
                 }
-                console.log("cache miss");
-                // Clone the no request for fetch and cache
+                console.log(`Cache miss for ${event.request.url}`);
+                
                 const fetchRequest = event.request.clone();
                 return fetch(fetchRequest).then(
                     (response) => {
-                        // Check if we received a valid response
                         if (!response || response.status !== 200 || response.type !== 'basic') {
+                            console.error(`Failed to fetch or invalid response for ${event.request.url}`);
                             return response;
                         }
-                        // Clone the response for cache storage
+
                         const responseToCache = response.clone();
                         caches.open(CACHE_NAME)
                             .then((cache) => {
                                 cache.put(event.request, responseToCache);
-                            });
+                                console.log(`Cached response for ${event.request.url}`);
+                            })
+                            .catch(error => console.error(`Failed to cache ${event.request.url}:`, error));
+
                         return response;
                     }
-                );
+                ).catch(error => console.error(`Network error for ${event.request.url}:`, error));
             })
     );
 });
