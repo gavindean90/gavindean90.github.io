@@ -1,6 +1,6 @@
 // sw.js - Service Worker for caching the album player resources
 
-const CACHE_NAME = 'base3-album-cache-v1';
+const CACHE_NAME = 'base3-album-cache-v2';
 const urlsToCache = [
     '/',
     'base3.html',
@@ -44,37 +44,38 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-    console.log(`Fetching ${event.request.url}`);
-    event.respondWith(
-        caches.match(event.request)
-            .then((response) => {
-                if (response) {
-                    console.log(`Cache hit for ${event.request.url}`);
-                    return response;
-                }
-                console.log(`Cache miss for ${event.request.url}`);
-                
-                const fetchRequest = event.request.clone();
-                return fetch(fetchRequest).then(
-                    (response) => {
-                        if (!response || response.status !== 200 || response.type !== 'basic') {
-                            console.error(`Failed to fetch or invalid response for ${event.request.url}`);
-                            return response;
-                        }
+    const requestURL = new URL(event.request.url);
 
-                        const responseToCache = response.clone();
-                        caches.open(CACHE_NAME)
-                            .then((cache) => {
-                                cache.put(event.request, responseToCache);
-                                console.log(`Cached response for ${event.request.url}`);
-                            })
-                            .catch(error => console.error(`Failed to cache ${event.request.url}:`, error));
-
-                        return response;
+    if (requestURL.pathname.startsWith('/music/')) {
+        event.respondWith(
+            caches.open(CACHE_NAME).then((cache) => {
+                return cache.match(event.request).then((cachedResponse) => {
+                    if (cachedResponse) {
+                        console.log(`Serving ${event.request.url} from cache`);
+                        return cachedResponse;
                     }
-                ).catch(error => console.error(`Network error for ${event.request.url}:`, error));
+                    console.log(`Fetching ${event.request.url} from network`);
+                    return fetch(event.request).then((networkResponse) => {
+                        cache.put(event.request, networkResponse.clone());
+                        return networkResponse;
+                    }).catch(() => {
+                        // Handle cases where both network and cache fail
+                        return new Response('Offline - song not available in cache', {
+                            status: 408,
+                            statusText: 'Network and cache failed',
+                        });
+                    });
+                });
             })
-    );
+        );
+    } else {
+        // Fallback for non-audio requests
+        event.respondWith(
+            caches.match(event.request).then((response) => {
+                return response || fetch(event.request);
+            })
+        );
+    }
 });
 
 self.addEventListener('activate', (event) => {
