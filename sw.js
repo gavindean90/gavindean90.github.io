@@ -55,11 +55,21 @@ self.addEventListener('fetch', (event) => {
                         return cachedResponse;
                     }
                     console.log(`Fetching ${event.request.url} from network`);
-                    return fetch(event.request).then((networkResponse) => {
+
+                    // Clone the request and remove Range headers
+                    const modifiedRequest = new Request(event.request, {
+                        headers: new Headers(event.request.headers)
+                    });
+                    modifiedRequest.headers.delete('Range');
+
+                    return fetch(modifiedRequest).then((networkResponse) => {
+                        if (!networkResponse || networkResponse.status !== 200) {
+                            throw new Error('Failed to fetch or non-200 response');
+                        }
                         cache.put(event.request, networkResponse.clone());
                         return networkResponse;
-                    }).catch(() => {
-                        // Handle cases where both network and cache fail
+                    }).catch((error) => {
+                        console.error(`Fetch failed for ${event.request.url}:`, error);
                         return new Response('Offline - song not available in cache', {
                             status: 408,
                             statusText: 'Network and cache failed',
@@ -69,7 +79,7 @@ self.addEventListener('fetch', (event) => {
             })
         );
     } else {
-        // Fallback for non-audio requests
+        // Handle non-audio requests
         event.respondWith(
             caches.match(event.request).then((response) => {
                 return response || fetch(event.request);
