@@ -9,10 +9,19 @@ const urlsToCache = [
     '/music/Full_Capacity.m4a',
     '/music/Deep_Sleep.m4a',
     '/music/Level_9.m4a',
-    '/music/Windy.m4a',
+    '/music/windy.m4a',
     '/music/T-Rex_T-Rex.m4a',
     '/music/Walking_on_the_C.m4a',
     '/music/Won_2_1.m4a',
+    '/music/Lead_with_Your_Hips.wav',
+    '/music/Midnight_Attitude.wav',
+    '/music/Full_Capacity.wav',
+    '/music/Deep_Sleep.wav',
+    '/music/Level_9.wav',
+    '/music/windy.wav',
+    '/music/T-Rex_T-Rex.wav',
+    '/music/Walking_on_the_C.wav',
+    '/music/Won_2_1.wav',
     // Add other assets and audio files here as needed
 ];
 
