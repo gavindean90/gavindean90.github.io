@@ -3,6 +3,7 @@
 const CACHE_NAME = 'base3-album-cache-v1';
 const urlsToCache = [
     '/',
+    'base3.html'
     '/images/Base3Logo.jpg',
     '/music/Lead_with_Your_Hips.m4a',
     '/music/Midnight_Attitude.m4a',
