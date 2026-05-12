@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="A dynamic education decision calculator for comparing educational timing, program fit, dependents, and career-risk assumptions." />
-  <title>Education Decision Calculator</title>
+  <meta name="description" content="A dynamic education decision planner for comparing timing, program topology, life load, and career-risk assumptions." />
+  <title>Education Decision Planner</title>
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -12,13 +12,17 @@
     * { box-sizing: border-box; }
     body { margin: 0; background: #0f0d0a; color: #e8dcc8; font-family: Georgia, 'Times New Roman', serif; }
     input[type="range"] { width: 100%; accent-color: #c9813a; cursor: pointer; }
+    input[type="text"] { width: 100%; background: #0f0d0a; border: 1px solid #3d3020; color: #f0e6d3; padding: 0.45rem 0.55rem; border-radius: 3px; }
     button { font: inherit; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+    .page-shell { max-width: 1040px; margin: 0 auto; padding-left: 2rem; padding-right: 2rem; }
+    .panel { background: #14110d; border: 1px solid #2a2218; border-radius: 4px; padding: 1rem; }
+    .tiny-label { font-size: 0.68rem; letter-spacing: 0.14em; color: #7a6f5e; text-transform: uppercase; font-family: monospace; }
     .chart-label { fill: #5a5040; font-size: 11px; font-family: monospace; }
     .chart-title { color: #8a7d6a; margin-bottom: 0.75rem; font-size: 0.78rem; font-style: italic; }
-    @media (max-width: 720px) {
-      .page-shell { padding-left: 1rem !important; padding-right: 1rem !important; }
-      .preset-grid { grid-template-columns: 1fr !important; }
-    }
+    .link-button { background: none; border: 1px solid #3d3020; color: #c9b89a; cursor: pointer; border-radius: 3px; padding: 0.4rem 0.7rem; font-size: 0.72rem; font-family: monospace; }
+    .link-button:hover { border-color: #c9813a; color: #f0e6d3; }
+    @media (max-width: 760px) { .page-shell { padding-left: 1rem; padding-right: 1rem; } .preset-grid { grid-template-columns: 1fr !important; } }
   </style>
 </head>
 <body>
@@ -27,13 +31,58 @@
   <script type="text/babel">
     const { useMemo, useState } = React;
 
-    const PRESETS = {
-      traditional: { label: "Traditional Semester", icon: "🏛️", executionFit: 1.45, hours: 480, tuition: 18000, desc: "High cadence rigidity, fixed deadlines, administrative complexity" },
-      wgu: { label: "WGU", icon: "🎓", executionFit: 1.1, hours: 400, tuition: 7400, desc: "Competency-based, moderate structure, self-paced within terms" },
-      umpi: { label: "UMPI", icon: "📘", executionFit: 1.2, hours: 420, tuition: 9000, desc: "Low cost, medium cadence rigidity, structured sessions" },
-      mypath: { label: "UMass Global MyPath", icon: "🧭", executionFit: 0.9, hours: 360, tuition: 9750, desc: "High elasticity, interruption-tolerant, hyperfocus-compatible" },
-      flexpath: { label: "FlexPath", icon: "⚡", executionFit: 0.85, hours: 340, tuition: 10800, desc: "Maximum elasticity, lower institutional signaling weight" }
+    const EXAMPLES = {
+      custom: { label: "Custom Program", icon: "✏️", executionFit: 1.0, hours: 360, tuition: 10000, desc: "Use your own school, program, bootcamp, certificate, or training path." },
+      semester: { label: "Semester-based Example", icon: "🏛️", executionFit: 1.45, hours: 480, tuition: 18000, desc: "Fixed calendar, higher deadline density, less interruption tolerance." },
+      competency: { label: "Competency Example", icon: "🎓", executionFit: 1.05, hours: 400, tuition: 8000, desc: "Self-paced within terms, moderate structure, variable accountability." },
+      elastic: { label: "High-elasticity Example", icon: "🧭", executionFit: 0.9, hours: 360, tuition: 9750, desc: "Longer runway, low deadline density, interruption-tolerant topology." },
+      intensive: { label: "Intensive Bootcamp Example", icon: "⚡", executionFit: 1.3, hours: 520, tuition: 15000, desc: "Short, concentrated, high activation pressure and high schedule collision." }
     };
+
+    const DEFAULT_STATE = {
+      title: "My education scenario",
+      dependents: [
+        { age: 3, care: 1, advanced: false, careEndAge: 18, longTermCare: 1 },
+        { age: 5, care: 1, advanced: false, careEndAge: 18, longTermCare: 1 }
+      ],
+      ms: 2.2,
+      s: 55,
+      programKey: "custom",
+      programLabel: "Custom Program",
+      executionFit: 1.0,
+      hours: 360,
+      tuition: 10000,
+      Cb: 8000,
+      fieldRisk: 0.45,
+      annualLoss: 45000,
+      protection: 0.35,
+      horizon: 25,
+      discount: 0.04,
+      Fs: 99,
+      Ts: 6,
+      prepHours: 80,
+      prepFit: 0.85,
+      prepLoadScale: 0.4
+    };
+
+    function safeNumber(value, fallback) {
+      const n = Number(value);
+      return Number.isFinite(n) ? n : fallback;
+    }
+
+    function loadInitialState() {
+      const params = new URLSearchParams(window.location.search);
+      const packed = params.get("s");
+      if (!packed) return DEFAULT_STATE;
+      try {
+        const json = decodeURIComponent(atob(packed));
+        const parsed = JSON.parse(json);
+        return { ...DEFAULT_STATE, ...parsed };
+      } catch (error) {
+        console.warn("Could not parse shared state", error);
+        return DEFAULT_STATE;
+      }
+    }
 
     function Ddev(age) {
       if (age <= 1) return 2.2;
@@ -53,15 +102,15 @@
     function D(age) { return 0.3 + Ddev(age); }
 
     function dependentLoad(dependent, yearsFromNow) {
-      const futureAge = dependent.age + yearsFromNow;
+      const futureAge = safeNumber(dependent.age, 0) + yearsFromNow;
       const standardLoad = D(futureAge);
-      if (!dependent.advanced) return dependent.care * standardLoad;
-      const elevatedActive = futureAge < dependent.careEndAge;
-      const careNow = elevatedActive ? dependent.care : dependent.longTermCare;
+      if (!dependent.advanced) return safeNumber(dependent.care, 1) * standardLoad;
+      const elevatedActive = futureAge < safeNumber(dependent.careEndAge, 18);
+      const careNow = elevatedActive ? safeNumber(dependent.care, 1) : safeNumber(dependent.longTermCare, 1);
       return careNow * standardLoad;
     }
 
-    function Afamily(dependents, yearsFromNow, rho = 0.3) {
+    function lifeLoad(dependents, yearsFromNow, rho = 0.3) {
       const loads = dependents.map(dep => dependentLoad(dep, yearsFromNow));
       const individual = loads.reduce((sum, load) => sum + load, 0);
       let interaction = 0;
@@ -71,36 +120,69 @@
       return individual + rho * interaction;
     }
 
-    function Rt(year) { return Math.min(1.0, 0.55 + 0.045 * year); }
+    function institutionalReliance(year) { return Math.min(1.25, 0.55 + 0.045 * year); }
+    function discountFactor(rate, year) { return 1 / Math.pow(1 + rate, year); }
 
-    function computeNV(params, yearsFromNow) {
-      const { dependents, ms, s, executionFit, hours, tuition, Cb, Fs, Ts, fieldRisk } = params;
-      const af = Afamily(dependents, yearsFromNow);
-      const prepHours = 80;
-      const prepExecutionFit = 0.85;
-      const Aprep = af * 0.4;
-      const familyCost = ms * s * hours * executionFit * af;
-      const prepCost = ms * s * prepHours * prepExecutionFit * Aprep;
-      const subscriptionLeakage = Fs * Ts;
-      const totalCost = tuition + Cb + familyCost + prepCost + subscriptionLeakage;
-      const rt = Rt(yearsFromNow);
-      const lossMagnitude = 180000;
-      const degreeProtection = 0.35;
-      const benefit = fieldRisk * rt * lossMagnitude * degreeProtection;
-      return { nv: benefit - totalCost, benefit, totalCost, familyCost, prepCost, tuition, Cb, subscriptionLeakage, af, rt };
+    function pvBenefitIfStart(state, startYear) {
+      let pv = 0;
+      for (let y = startYear; y < state.horizon; y += 1) {
+        const annualRiskLoss = state.fieldRisk * institutionalReliance(y) * state.annualLoss;
+        pv += annualRiskLoss * state.protection * discountFactor(state.discount, y);
+      }
+      return pv;
     }
 
-    function moneyShort(value) {
-      const rounded = Math.round(value / 1000);
-      return `${value >= 0 ? "+" : ""}${rounded}k`;
+    function pvRiskUncoveredBeforeStart(state, startYear) {
+      let pv = 0;
+      for (let y = 0; y < startYear; y += 1) {
+        const annualRiskLoss = state.fieldRisk * institutionalReliance(y) * state.annualLoss;
+        pv += annualRiskLoss * state.protection * discountFactor(state.discount, y);
+      }
+      return pv;
+    }
+
+    function computeYear(state, startYear) {
+      const af = lifeLoad(state.dependents, startYear);
+      const prepA = af * state.prepLoadScale;
+      const universityLoadCost = state.ms * state.s * state.hours * state.executionFit * af;
+      const prepCost = state.ms * state.s * state.prepHours * state.prepFit * prepA;
+      const subscriptionLeakage = state.Fs * state.Ts;
+      const directCost = state.tuition + state.Cb + subscriptionLeakage;
+      const undiscountedCost = directCost + universityLoadCost + prepCost;
+      const pvCost = undiscountedCost * discountFactor(state.discount, startYear);
+      const benefit = pvBenefitIfStart(state, startYear);
+      const uncovered = pvRiskUncoveredBeforeStart(state, startYear);
+      const nv = benefit - pvCost;
+      return { year: startYear, nv, benefit, uncovered, totalCost: pvCost, rawCost: undiscountedCost, universityLoadCost, prepCost, tuition: state.tuition, Cb: state.Cb, subscriptionLeakage, af, rt: institutionalReliance(startYear) };
+    }
+
+    function money(value) { return `${value >= 0 ? "+" : ""}$${Math.round(value / 1000)}k`; }
+    function shortNum(value) { return `${value >= 0 ? "+" : ""}${Math.round(value / 1000)}k`; }
+    function formatPlainMoney(value) { return `$${Math.round(value / 1000)}k`; }
+
+    function shareUrl(state) {
+      const payload = btoa(encodeURIComponent(JSON.stringify(state)));
+      return `${window.location.origin}${window.location.pathname}?s=${payload}`;
+    }
+
+    function getSavedScenarios() {
+      try { return JSON.parse(localStorage.getItem("education-scenarios") || "[]"); }
+      catch { return []; }
+    }
+
+    function saveScenario(state) {
+      const scenarios = getSavedScenarios();
+      const saved = { id: Date.now(), title: state.title || "Untitled scenario", state };
+      localStorage.setItem("education-scenarios", JSON.stringify([saved, ...scenarios].slice(0, 12)));
+      return saved;
     }
 
     function SliderRow({ label, sublabel, min, max, step, value, onChange, format }) {
       return (
-        <div style={{ marginBottom: "1.4rem" }}>
+        <div style={{ marginBottom: "1.15rem" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "0.35rem", gap: "1rem" }}>
-            <span style={{ fontSize: "0.78rem", color: "#c9b89a", letterSpacing: "0.04em", textTransform: "uppercase" }}>{label}</span>
-            <span style={{ fontSize: "1.05rem", fontFamily: "monospace", color: "#f0e6d3", fontWeight: 600 }}>{format(value)}</span>
+            <span style={{ fontSize: "0.76rem", color: "#c9b89a", letterSpacing: "0.04em", textTransform: "uppercase" }}>{label}</span>
+            <span className="mono" style={{ fontSize: "1rem", color: "#f0e6d3", fontWeight: 600 }}>{format(value)}</span>
           </div>
           {sublabel && <div style={{ fontSize: "0.68rem", color: "#7a6f5e", marginBottom: "0.4rem", fontStyle: "italic" }}>{sublabel}</div>}
           <input type="range" min={min} max={max} step={step} value={value} onChange={event => onChange(parseFloat(event.target.value))} />
@@ -108,9 +190,13 @@
       );
     }
 
+    function MiniStat({ label, value, detail, color = "#c9b89a" }) {
+      return <div className="panel"><div className="tiny-label">{label}</div><div className="mono" style={{ color, fontSize: "1.3rem", marginTop: "0.35rem" }}>{value}</div>{detail && <div style={{ color: "#6f6454", fontSize: "0.72rem", marginTop: "0.35rem", lineHeight: 1.45 }}>{detail}</div>}</div>;
+    }
+
     function SimpleAreaChart({ data, dataKey, color, name, valueFormatter, height = 220, optimalYear = null }) {
       const width = 900;
-      const pad = { left: 54, right: 24, top: 16, bottom: 34 };
+      const pad = { left: 58, right: 24, top: 16, bottom: 34 };
       const chartW = width - pad.left - pad.right;
       const chartH = height - pad.top - pad.bottom;
       const values = data.map(d => d[dataKey]);
@@ -123,171 +209,137 @@
       const areaPath = `${linePath} L${x(data.length - 1)},${y(0)} L${x(0)},${y(0)} Z`;
       const zeroY = y(0);
       const yTicks = [minValue, (minValue + maxValue) / 2, maxValue];
-
       return (
         <svg viewBox={`0 0 ${width} ${height}`} width="100%" height={height} role="img" aria-label={`${name} over time`}>
           <line x1={pad.left} x2={width - pad.right} y1={zeroY} y2={zeroY} stroke="#3d3020" strokeDasharray="4 4" />
-          {yTicks.map((tick, i) => (
-            <g key={i}>
-              <line x1={pad.left} x2={width - pad.right} y1={y(tick)} y2={y(tick)} stroke="#1a1510" />
-              <text x={pad.left - 10} y={y(tick) + 4} textAnchor="end" className="chart-label">{valueFormatter(tick)}</text>
-            </g>
-          ))}
-          {data.map((d, i) => (
-            <g key={d.year}>
-              <line x1={x(i)} x2={x(i)} y1={height - pad.bottom} y2={height - pad.bottom + 5} stroke="#2a2218" />
-              {i % 2 === 0 && <text x={x(i)} y={height - 10} textAnchor="middle" className="chart-label">+{d.year}yr</text>}
-            </g>
-          ))}
-          {optimalYear !== null && optimalYear > 0 && (
-            <g>
-              <line x1={x(optimalYear)} x2={x(optimalYear)} y1={pad.top} y2={height - pad.bottom} stroke="#c9813a" strokeDasharray="5 4" />
-              <text x={x(optimalYear) + 5} y={pad.top + 12} fill="#c9813a" fontSize="11" fontFamily="monospace">optimal</text>
-            </g>
-          )}
+          {yTicks.map((tick, i) => <g key={i}><line x1={pad.left} x2={width - pad.right} y1={y(tick)} y2={y(tick)} stroke="#1a1510" /><text x={pad.left - 10} y={y(tick) + 4} textAnchor="end" className="chart-label">{valueFormatter(tick)}</text></g>)}
+          {data.map((d, i) => <g key={d.year}><line x1={x(i)} x2={x(i)} y1={height - pad.bottom} y2={height - pad.bottom + 5} stroke="#2a2218" />{i % 2 === 0 && <text x={x(i)} y={height - 10} textAnchor="middle" className="chart-label">+{d.year}yr</text>}</g>)}
+          {optimalYear !== null && optimalYear > 0 && <g><line x1={x(optimalYear)} x2={x(optimalYear)} y1={pad.top} y2={height - pad.bottom} stroke="#c9813a" strokeDasharray="5 4" /><text x={x(optimalYear) + 5} y={pad.top + 12} fill="#c9813a" fontSize="11" fontFamily="monospace">best</text></g>}
           <path d={areaPath} fill={color} opacity="0.18" />
           <path d={linePath} fill="none" stroke={color} strokeWidth="3" />
-          {data.map((d, i) => (
-            <g key={`point-${d.year}`}>
-              <circle cx={x(i)} cy={y(d[dataKey])} r="4" fill="#0f0d0a" stroke={color} strokeWidth="2" />
-              <title>{`Year +${d.year}: ${name} ${valueFormatter(d[dataKey])}`}</title>
-            </g>
-          ))}
+          {data.map((d, i) => <g key={`point-${d.year}`}><circle cx={x(i)} cy={y(d[dataKey])} r="4" fill="#0f0d0a" stroke={color} strokeWidth="2" /><title>{`Year +${d.year}: ${name} ${valueFormatter(d[dataKey])}`}</title></g>)}
         </svg>
       );
     }
 
     function App() {
-      const [dependents, setDependents] = useState([
-        { age: 3, care: 1, advanced: false, careEndAge: 18, longTermCare: 1 },
-        { age: 5, care: 1, advanced: false, careEndAge: 18, longTermCare: 1 }
-      ]);
-      const [ms, setMs] = useState(2.2);
-      const [s, setS] = useState(55);
-      const [preset, setPreset] = useState("wgu");
-      const [executionFit, setExecutionFit] = useState(PRESETS.wgu.executionFit);
-      const [hours, setHours] = useState(PRESETS.wgu.hours);
-      const [tuition, setTuition] = useState(PRESETS.wgu.tuition);
-      const [Cb, setCb] = useState(8000);
-      const [fieldRisk, setFieldRisk] = useState(0.65);
-      const Fs = 99;
-      const Ts = 18;
+      const [state, setState] = useState(loadInitialState);
+      const [saved, setSaved] = useState(getSavedScenarios);
+      const [message, setMessage] = useState("");
+      const update = patch => setState(current => ({ ...current, ...patch }));
+      const updateDependent = (index, patch) => update({ dependents: state.dependents.map((dep, j) => j === index ? { ...dep, ...patch } : dep) });
 
-      const applyPreset = key => {
-        setPreset(key);
-        setExecutionFit(PRESETS[key].executionFit);
-        setHours(PRESETS[key].hours);
-        setTuition(PRESETS[key].tuition);
+      const timelineData = useMemo(() => Array.from({ length: Math.min(16, state.horizon + 1) }, (_, i) => {
+        const r = computeYear(state, i);
+        return { ...r, nv: Math.round(r.nv), benefit: Math.round(r.benefit), totalCost: Math.round(r.totalCost), rawCost: Math.round(r.rawCost), universityLoadCost: Math.round(r.universityLoadCost), prepCost: Math.round(r.prepCost), af: parseFloat(r.af.toFixed(2)), rt: parseFloat(r.rt.toFixed(2)) };
+      }), [state]);
+
+      const optimal = useMemo(() => timelineData.reduce((best, row) => row.nv > best.nv ? row : best, timelineData[0]), [timelineData]);
+      const now = timelineData[0];
+      const nextYear = timelineData[1] || now;
+      const costPerProgramHour = state.ms * state.s * state.executionFit * now.af;
+      const fitDelta = state.ms * state.s * state.hours * 0.1 * now.af;
+      const verdict = optimal.year === 0 ? { label: "ACT NOW", color: "#4caf7d", sub: "The model currently favors starting immediately." } : optimal.year <= 2 ? { label: "SOON", color: "#c9813a", sub: `Best modeled start is around +${optimal.year} year${optimal.year > 1 ? "s" : ""}.` } : { label: "WAIT / WATCH", color: "#8b5cf6", sub: `Best modeled start is around +${optimal.year} years, under current assumptions.` };
+
+      const applyExample = key => {
+        const p = EXAMPLES[key];
+        update({ programKey: key, programLabel: p.label, executionFit: p.executionFit, hours: p.hours, tuition: p.tuition });
       };
 
-      const timelineData = useMemo(() => Array.from({ length: 11 }, (_, i) => {
-        const result = computeNV({ dependents, ms, s, executionFit, hours, tuition, Cb, Fs, Ts, fieldRisk }, i);
-        return { year: i, nv: Math.round(result.nv), benefit: Math.round(result.benefit), familyCost: Math.round(result.familyCost), prepCost: Math.round(result.prepCost), totalCost: Math.round(result.totalCost), af: parseFloat(result.af.toFixed(2)), rt: parseFloat(result.rt.toFixed(2)), tuition: result.tuition };
-      }), [dependents, ms, s, executionFit, hours, tuition, Cb, fieldRisk]);
+      const copyShare = async () => {
+        const url = shareUrl(state);
+        try { await navigator.clipboard.writeText(url); setMessage("Share link copied."); }
+        catch { window.prompt("Copy this share link:", url); }
+      };
 
-      const optimalYear = useMemo(() => {
-        let best = 0;
-        let bestNV = -Infinity;
-        timelineData.forEach(d => { if (d.nv > bestNV) { bestNV = d.nv; best = d.year; } });
-        return best;
-      }, [timelineData]);
-
-      const nowNV = timelineData[0] ? timelineData[0].nv : 0;
-      const optimalNV = timelineData[optimalYear] ? timelineData[optimalYear].nv : 0;
-      const gain = optimalNV - nowNV;
-      const verdict = optimalYear === 0
-        ? { label: "ACT NOW", color: "#4caf7d", sub: "Your window is open. Conditions favor enrollment." }
-        : optimalYear <= 2
-          ? { label: "SOON", color: "#c9813a", sub: `Optimal window opens in ~${optimalYear} year${optimalYear > 1 ? "s" : ""}. Begin preparing.` }
-          : { label: "NOT YET", color: "#8b5cf6", sub: `Hold pattern for ~${optimalYear} years. Life load still dominates.` };
-
-      const addDependent = () => setDependents(current => [...current, { age: 1, care: 1, advanced: false, careEndAge: 18, longTermCare: 1 }]);
-      const removeDependent = index => setDependents(current => current.filter((_, j) => j !== index));
-      const updateDependent = (index, patch) => setDependents(current => current.map((dep, j) => j === index ? { ...dep, ...patch } : dep));
+      const handleSave = () => { const item = saveScenario(state); setSaved(getSavedScenarios()); setMessage(`Saved: ${item.title}`); };
+      const addDependent = () => update({ dependents: [...state.dependents, { age: 1, care: 1, advanced: false, careEndAge: 18, longTermCare: 1 }] });
+      const removeDependent = index => update({ dependents: state.dependents.filter((_, j) => j !== index) });
 
       return (
         <div>
-          <header className="page-shell" style={{ borderBottom: "1px solid #2a2218", padding: "2.5rem 2rem 2rem", maxWidth: "980px", margin: "0 auto" }}>
-            <div style={{ fontSize: "0.7rem", letterSpacing: "0.2em", color: "#7a6f5e", textTransform: "uppercase", marginBottom: "0.75rem", fontFamily: "monospace" }}>Education Decision Calculator</div>
-            <h1 style={{ fontSize: "clamp(1.7rem, 4vw, 2.7rem)", fontWeight: 400, lineHeight: 1.2, margin: 0, color: "#f0e6d3" }}>Should You Go Back<br /><span style={{ color: "#c9813a" }}>To School Right Now?</span></h1>
-            <p style={{ fontSize: "0.95rem", color: "#8a7d6a", marginTop: "1rem", maxWidth: "620px", lineHeight: 1.7, fontStyle: "italic" }}>A dynamic model for comparing education timing, program topology, life load, and career-risk assumptions. Adjust the inputs and watch the optimal window move.</p>
+          <header className="page-shell" style={{ borderBottom: "1px solid #2a2218", paddingTop: "2.5rem", paddingBottom: "2rem" }}>
+            <div className="tiny-label">Education Decision Planner</div>
+            <h1 style={{ fontSize: "clamp(1.7rem, 4vw, 2.8rem)", fontWeight: 400, lineHeight: 1.15, margin: "0.75rem 0 0", color: "#f0e6d3" }}>When should this education path fit into your life?</h1>
+            <p style={{ fontSize: "0.95rem", color: "#8a7d6a", marginTop: "1rem", maxWidth: "720px", lineHeight: 1.65, fontStyle: "italic" }}>A scenario calculator for any education plan: first degree, return-to-school, certificate, bootcamp, graduate program, or professional training. It estimates the tradeoff between program value, timing, life load, and execution fit.</p>
           </header>
 
-          <main className="page-shell" style={{ maxWidth: "980px", margin: "0 auto", padding: "0 2rem 4rem" }}>
-            <section style={{ margin: "2rem 0", padding: "1.5rem 2rem", border: `1px solid ${verdict.color}44`, borderLeft: `3px solid ${verdict.color}`, background: `${verdict.color}0a`, borderRadius: "2px" }}>
+          <main className="page-shell" style={{ paddingTop: "2rem", paddingBottom: "4rem" }}>
+            <section style={{ padding: "1.3rem 1.5rem", border: `1px solid ${verdict.color}44`, borderLeft: `3px solid ${verdict.color}`, background: `${verdict.color}0a`, borderRadius: "3px", marginBottom: "1.5rem" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
-                <span style={{ fontSize: "1.4rem", fontFamily: "monospace", color: verdict.color, fontWeight: 700, letterSpacing: "0.1em" }}>{verdict.label}</span>
+                <span className="mono" style={{ fontSize: "1.35rem", color: verdict.color, fontWeight: 700, letterSpacing: "0.08em" }}>{verdict.label}</span>
                 <span style={{ fontSize: "0.88rem", color: "#c9b89a", fontStyle: "italic" }}>{verdict.sub}</span>
-                {gain > 1000 && <span style={{ marginLeft: "auto", fontSize: "0.75rem", color: "#7a6f5e", fontFamily: "monospace" }}>waiting gains +${Math.round(gain / 1000)}k NV</span>}
+                <span className="mono" style={{ marginLeft: "auto", fontSize: "0.75rem", color: "#7a6f5e" }}>best NV {money(optimal.nv)}</span>
               </div>
             </section>
 
-            <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "2rem" }}>
-              <div>
-                <div style={{ marginBottom: "2rem" }}>
-                  <div style={{ fontSize: "0.7rem", letterSpacing: "0.15em", color: "#7a6f5e", textTransform: "uppercase", marginBottom: "1rem", fontFamily: "monospace" }}>Dependents / life load</div>
-                  {dependents.map((dep, i) => (
-                    <div key={i} style={{ border: "1px solid #2a2218", background: "#14110d", padding: "0.85rem", borderRadius: "3px", marginBottom: "0.85rem" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "0.75rem" }}>
-                        <span style={{ fontSize: "0.75rem", color: "#7a6f5e", fontFamily: "monospace", width: "88px" }}>Dependent {i + 1}</span>
-                        <input type="range" min="0" max="17" step="1" value={dep.age} onChange={event => updateDependent(i, { age: parseInt(event.target.value, 10) })} />
-                        <span style={{ fontSize: "0.9rem", color: "#f0e6d3", fontFamily: "monospace", width: "48px" }}>age {dep.age}</span>
-                        {dependents.length > 1 && <button onClick={() => removeDependent(i)} style={{ background: "none", border: "1px solid #3d3020", color: "#7a6f5e", cursor: "pointer", borderRadius: "2px", padding: "0.1rem 0.4rem" }}>×</button>}
-                      </div>
-                      <SliderRow label="Care intensity" sublabel="1.0 = typical baseline; higher = elevated support needs" min={0.5} max={4} step={0.1} value={dep.care} onChange={value => updateDependent(i, { care: value })} format={v => `${v.toFixed(1)}×`} />
-                      <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.75rem", color: "#7a6f5e", fontFamily: "monospace" }}>
-                        <input type="checkbox" checked={dep.advanced} onChange={event => updateDependent(i, { advanced: event.target.checked })} /> Advanced care duration
-                      </label>
-                      {dep.advanced && <div style={{ marginTop: "0.9rem", borderTop: "1px solid #2a2218", paddingTop: "0.9rem" }}>
-                        <SliderRow label="Elevated care until age" sublabel="After this age, long-term care intensity applies" min={dep.age} max={30} step={1} value={dep.careEndAge} onChange={value => updateDependent(i, { careEndAge: value })} format={v => `age ${v}`} />
-                        <SliderRow label="Long-term care floor" sublabel="Care intensity after elevated duration ends" min={0.5} max={4} step={0.1} value={dep.longTermCare} onChange={value => updateDependent(i, { longTermCare: value })} format={v => `${v.toFixed(1)}×`} />
-                      </div>}
-                    </div>
-                  ))}
-                  {dependents.length < 5 && <button onClick={addDependent} style={{ background: "none", border: "1px solid #3d3020", color: "#7a6f5e", cursor: "pointer", borderRadius: "2px", padding: "0.35rem 0.75rem", fontSize: "0.72rem", fontFamily: "monospace", letterSpacing: "0.08em" }}>+ add dependent</button>}
-                </div>
+            <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: "0.75rem", marginBottom: "2rem" }}>
+              <MiniStat label="Today NV" value={money(now.nv)} detail="Net value if started now" color={now.nv >= 0 ? "#4caf7d" : "#e05c5c"} />
+              <MiniStat label="Best modeled start" value={`+${optimal.year} yr`} detail={`Difference vs today: ${money(optimal.nv - now.nv)}`} color="#c9813a" />
+              <MiniStat label="Cost per program hour now" value={formatPlainMoney(costPerProgramHour)} detail="Current life-load adjusted cost of one execution hour" />
+              <MiniStat label="Execution fit sensitivity" value={formatPlainMoney(fitDelta)} detail="Approx. cost impact if fit worsens by 0.10 today" />
+            </section>
 
-                <div style={{ borderTop: "1px solid #2a2218", paddingTop: "1.5rem" }}>
-                  <SliderRow label="Hourly value" sublabel="Your effective hourly rate or value estimate" min={20} max={200} step={5} value={s} onChange={setS} format={v => `$${v}/hr`} />
-                  <SliderRow label="Life time multiplier" sublabel="How much you value protected life/family time vs. work time" min={1} max={4} step={0.1} value={ms} onChange={setMs} format={v => `${v.toFixed(1)}×`} />
-                  <SliderRow label="Field credential risk" sublabel="How actively your field filters on credentials" min={0.1} max={1} step={0.05} value={fieldRisk} onChange={setFieldRisk} format={v => `${Math.round(v * 100)}%`} />
-                  <SliderRow label="Burnout / identity cost" sublabel="Estimated psychological friction of taking this on" min={0} max={30000} step={1000} value={Cb} onChange={setCb} format={v => `$${(v / 1000).toFixed(0)}k`} />
+            <section className="panel" style={{ marginBottom: "2rem" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "1rem", alignItems: "end" }}>
+                <div><div className="tiny-label" style={{ marginBottom: "0.4rem" }}>Scenario title</div><input type="text" value={state.title} onChange={e => update({ title: e.target.value })} /></div>
+                <button className="link-button" onClick={copyShare}>Copy share link</button>
+                <button className="link-button" onClick={handleSave}>Save in browser</button>
+                {message && <div style={{ color: "#4caf7d", fontSize: "0.78rem" }}>{message}</div>}
+              </div>
+              {saved.length > 0 && <div style={{ marginTop: "1rem" }}><div className="tiny-label" style={{ marginBottom: "0.5rem" }}>Saved states</div><div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>{saved.map(item => <button key={item.id} className="link-button" onClick={() => setState({ ...DEFAULT_STATE, ...item.state })}>{item.title}</button>)}</div></div>}
+            </section>
+
+            <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(330px, 1fr))", gap: "2rem" }}>
+              <div>
+                <div className="tiny-label" style={{ marginBottom: "1rem" }}>Life load / dependents</div>
+                {state.dependents.map((dep, i) => <div key={i} className="panel" style={{ marginBottom: "0.85rem" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "0.75rem" }}><span className="mono" style={{ fontSize: "0.75rem", color: "#7a6f5e", width: "88px" }}>Dependent {i + 1}</span><input type="range" min="0" max="17" step="1" value={dep.age} onChange={e => updateDependent(i, { age: parseInt(e.target.value, 10) })} /><span className="mono" style={{ color: "#f0e6d3", width: "48px" }}>age {dep.age}</span>{state.dependents.length > 1 && <button className="link-button" onClick={() => removeDependent(i)}>×</button>}</div>
+                  <SliderRow label="Care intensity" sublabel="1.0 = baseline; higher = elevated support needs" min={0.5} max={4} step={0.1} value={dep.care} onChange={value => updateDependent(i, { care: value })} format={v => `${v.toFixed(1)}×`} />
+                  <label className="mono" style={{ display: "flex", gap: "0.5rem", alignItems: "center", color: "#7a6f5e", fontSize: "0.75rem" }}><input type="checkbox" checked={dep.advanced} onChange={e => updateDependent(i, { advanced: e.target.checked })} /> Advanced care duration</label>
+                  {dep.advanced && <div style={{ marginTop: "0.9rem", borderTop: "1px solid #2a2218", paddingTop: "0.9rem" }}><SliderRow label="Elevated care until age" sublabel="After this age, the long-term floor applies" min={dep.age} max={30} step={1} value={dep.careEndAge} onChange={value => updateDependent(i, { careEndAge: value })} format={v => `age ${v}`} /><SliderRow label="Long-term care floor" sublabel="Care intensity after elevated duration ends" min={0.5} max={4} step={0.1} value={dep.longTermCare} onChange={value => updateDependent(i, { longTermCare: value })} format={v => `${v.toFixed(1)}×`} /></div>}
+                </div>)}
+                {state.dependents.length < 6 && <button className="link-button" onClick={addDependent}>+ add dependent / constraint</button>}
+
+                <div style={{ borderTop: "1px solid #2a2218", paddingTop: "1.5rem", marginTop: "1.5rem" }}>
+                  <SliderRow label="Hourly value" sublabel="Effective hourly rate or personal value estimate" min={0} max={250} step={5} value={state.s} onChange={v => update({ s: v })} format={v => `$${v}/hr`} />
+                  <SliderRow label="Life-time multiplier" sublabel="Protected life/family/care time vs. work-time value" min={0} max={5} step={0.1} value={state.ms} onChange={v => update({ ms: v })} format={v => `${v.toFixed(1)}×`} />
+                  <SliderRow label="Burnout / identity cost" sublabel="Estimated psychological and recovery cost" min={0} max={50000} step={1000} value={state.Cb} onChange={v => update({ Cb: v })} format={v => `$${Math.round(v / 1000)}k`} />
                 </div>
               </div>
 
               <div>
-                <div style={{ fontSize: "0.7rem", letterSpacing: "0.15em", color: "#7a6f5e", textTransform: "uppercase", marginBottom: "1rem", fontFamily: "monospace" }}>Program Topology</div>
-                <div className="preset-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem", marginBottom: "1.25rem" }}>
-                  {Object.entries(PRESETS).map(([key, p]) => <button key={key} onClick={() => applyPreset(key)} style={{ background: preset === key ? "#2a1f10" : "none", border: `1px solid ${preset === key ? "#c9813a" : "#2a2218"}`, color: preset === key ? "#f0e6d3" : "#7a6f5e", cursor: "pointer", borderRadius: "2px", padding: "0.55rem 0.65rem", fontSize: "0.72rem", fontFamily: "monospace", textAlign: "left" }}><span style={{ marginRight: "0.4rem" }}>{p.icon}</span>{p.label}</button>)}
-                </div>
-                <div style={{ fontSize: "0.72rem", color: "#5a5040", fontStyle: "italic", marginBottom: "1.5rem", lineHeight: 1.6 }}>{PRESETS[preset].desc}</div>
-                <SliderRow label="Execution fit" sublabel="How efficiently you navigate this program's requirements vs. neutral baseline" min={0.5} max={2} step={0.05} value={executionFit} onChange={setExecutionFit} format={v => `${v.toFixed(2)}×`} />
-                <SliderRow label="Program hours" sublabel="Total execution hours to completion" min={200} max={600} step={20} value={hours} onChange={setHours} format={v => `${v}h`} />
-                <SliderRow label="Total tuition" sublabel="Full program cost including fees" min={2000} max={50000} step={500} value={tuition} onChange={setTuition} format={v => `$${(v / 1000).toFixed(1)}k`} />
-
-                <div style={{ marginTop: "1.25rem", background: "#14110d", border: "1px solid #2a2218", borderRadius: "3px", padding: "1rem" }}>
-                  <div style={{ fontSize: "0.65rem", letterSpacing: "0.12em", color: "#5a5040", textTransform: "uppercase", fontFamily: "monospace", marginBottom: "0.75rem" }}>Cost Breakdown — Today</div>
-                  {[["Tuition", timelineData[0].tuition], ["Life-load cost", timelineData[0].familyCost], ["Prep cost", timelineData[0].prepCost], ["Burnout", Cb], ["Subscription leakage", Fs * Ts]].map(([label, value]) => <div key={label} style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.4rem" }}><span style={{ fontSize: "0.73rem", color: "#7a6f5e" }}>{label}</span><span style={{ fontSize: "0.73rem", color: "#c9b89a", fontFamily: "monospace" }}>${Math.round(value / 1000)}k</span></div>)}
-                  <div style={{ borderTop: "1px solid #2a2218", marginTop: "0.5rem", paddingTop: "0.5rem", display: "flex", justifyContent: "space-between" }}><span style={{ fontSize: "0.73rem", color: "#c9b89a" }}>Net Value</span><span style={{ fontSize: "0.82rem", color: nowNV > 0 ? "#4caf7d" : "#e05c5c", fontFamily: "monospace", fontWeight: 600 }}>{nowNV > 0 ? "+" : ""}{Math.round(nowNV / 1000)}k</span></div>
+                <div className="tiny-label" style={{ marginBottom: "1rem" }}>Program / topology</div>
+                <div className="preset-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem", marginBottom: "1rem" }}>{Object.entries(EXAMPLES).map(([key, p]) => <button key={key} onClick={() => applyExample(key)} className="link-button" style={{ textAlign: "left", borderColor: state.programKey === key ? "#c9813a" : "#3d3020", color: state.programKey === key ? "#f0e6d3" : "#c9b89a" }}><span style={{ marginRight: "0.35rem" }}>{p.icon}</span>{p.label}</button>)}</div>
+                <div style={{ color: "#5a5040", fontSize: "0.72rem", fontStyle: "italic", lineHeight: 1.5, marginBottom: "1rem" }}>{EXAMPLES[state.programKey]?.desc || EXAMPLES.custom.desc}</div>
+                <div style={{ marginBottom: "1rem" }}><div className="tiny-label" style={{ marginBottom: "0.4rem" }}>Program name</div><input type="text" value={state.programLabel} onChange={e => update({ programKey: "custom", programLabel: e.target.value })} /></div>
+                <SliderRow label="Execution fit" sublabel="How efficiently you navigate this program's requirements vs. neutral baseline" min={0.5} max={2.5} step={0.05} value={state.executionFit} onChange={v => update({ executionFit: v })} format={v => `${v.toFixed(2)}×`} />
+                <SliderRow label="Program hours" sublabel="Total execution hours to completion" min={0} max={1200} step={20} value={state.hours} onChange={v => update({ hours: v })} format={v => `${v}h`} />
+                <SliderRow label="Direct cash cost" sublabel="Tuition, fees, tools, travel, books" min={0} max={100000} step={500} value={state.tuition} onChange={v => update({ tuition: v })} format={v => `$${(v / 1000).toFixed(1)}k`} />
+                <div style={{ borderTop: "1px solid #2a2218", paddingTop: "1.5rem", marginTop: "1.5rem" }}>
+                  <SliderRow label="Field / outcome risk" sublabel="How much credential or skill-risk matters in your target path" min={0} max={1} step={0.05} value={state.fieldRisk} onChange={v => update({ fieldRisk: v })} format={v => `${Math.round(v * 100)}%`} />
+                  <SliderRow label="Annual risk exposure" sublabel="Estimated annual loss if the education signal/skill is missing" min={0} max={250000} step={5000} value={state.annualLoss} onChange={v => update({ annualLoss: v })} format={v => `$${Math.round(v / 1000)}k/yr`} />
+                  <SliderRow label="Education protection" sublabel="How much of that risk this path plausibly reduces" min={0} max={1} step={0.05} value={state.protection} onChange={v => update({ protection: v })} format={v => `${Math.round(v * 100)}%`} />
+                  <SliderRow label="Planning horizon" sublabel="How many future years this path remains relevant" min={1} max={40} step={1} value={state.horizon} onChange={v => update({ horizon: v })} format={v => `${v}yr`} />
+                  <SliderRow label="Discount rate" sublabel="How strongly future value is discounted" min={0} max={0.15} step={0.005} value={state.discount} onChange={v => update({ discount: v })} format={v => `${(v * 100).toFixed(1)}%`} />
                 </div>
               </div>
             </section>
 
             <section style={{ marginTop: "2.5rem", borderTop: "1px solid #2a2218", paddingTop: "2rem" }}>
-              <div style={{ fontSize: "0.7rem", letterSpacing: "0.15em", color: "#7a6f5e", textTransform: "uppercase", marginBottom: "1.5rem", fontFamily: "monospace" }}>Timing Window Analysis</div>
-              <div style={{ marginBottom: "2.5rem" }}>
-                <div className="chart-title">Net value of enrolling at each future year</div>
-                <SimpleAreaChart data={timelineData} dataKey="nv" color="#c9813a" name="Net Value" valueFormatter={moneyShort} optimalYear={optimalYear} height={240} />
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "2rem" }}>
+              <div className="tiny-label" style={{ marginBottom: "1rem" }}>Timing analysis</div>
+              <div className="chart-title">Net value of starting at each future year</div>
+              <SimpleAreaChart data={timelineData} dataKey="nv" color="#c9813a" name="Net Value" valueFormatter={money} optimalYear={optimal.year} height={250} />
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "2rem", marginTop: "2rem" }}>
                 <div><div className="chart-title">Life/dependent load A(t)</div><SimpleAreaChart data={timelineData} dataKey="af" color="#8b5cf6" name="Life Load" valueFormatter={v => v.toFixed(2)} height={180} /></div>
-                <div><div className="chart-title">Institutional reliance R(t)</div><SimpleAreaChart data={timelineData} dataKey="rt" color="#4caf7d" name="Inst. Reliance" valueFormatter={v => v.toFixed(2)} height={180} /></div>
+                <div><div className="chart-title">PV benefit if started that year</div><SimpleAreaChart data={timelineData} dataKey="benefit" color="#4caf7d" name="PV Benefit" valueFormatter={money} height={180} /></div>
               </div>
             </section>
 
-            <footer style={{ marginTop: "3rem", borderTop: "1px solid #1a1510", paddingTop: "1.5rem", fontSize: "0.72rem", color: "#4a4030", fontStyle: "italic", lineHeight: 1.8 }}>
-              This framework models education as institutional-risk mitigation under life-load and execution-topology constraints. Execution fit reflects topology friction, not capability. Dependent care coefficients allow higher-support or long-duration care needs to be modeled without changing the default path. All dollar figures are present-value estimates and should be interpreted directionally.
-            </footer>
+            <section className="panel" style={{ marginTop: "2rem" }}>
+              <div className="tiny-label" style={{ marginBottom: "0.75rem" }}>What the model is allowed to say</div>
+              <p style={{ color: "#8a7d6a", lineHeight: 1.65, margin: 0 }}>This planner does not know which school is “best.” It compares scenarios under your assumptions. Execution fit is not ability; it estimates how efficiently you can navigate a given program topology. Dependents are optional, and care intensity lets the same structure model children, caregiving, health constraints, or other life-load factors. URL sharing and saved states are intended so users can fork examples, model several schools, and revise assumptions as real details become clearer.</p>
+            </section>
           </main>
         </div>
       );
