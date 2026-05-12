@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="A dynamic education decision calculator for comparing educational timing, program fit, dependents, and career-risk assumptions." />
+  <title>Education Decision Calculator</title>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://unpkg.com/recharts/umd/Recharts.min.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #0f0d0a; color: #e8dcc8; font-family: Georgia, 'Times New Roman', serif; }
+    input[type="range"] { width: 100%; accent-color: #c9813a; cursor: pointer; }
+    button { font: inherit; }
+    @media (max-width: 720px) {
+      .page-shell { padding-left: 1rem !important; padding-right: 1rem !important; }
+      .preset-grid { grid-template-columns: 1fr !important; }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useMemo, useState } = React;
+    const { Area, AreaChart, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } = Recharts;
+
+    const PRESETS = {
+      traditional: {
+        label: "Traditional Semester",
+        icon: "🏛️",
+        executionFit: 1.45,
+        hours: 480,
+        tuition: 18000,
+        desc: "High cadence rigidity, fixed deadlines, administrative complexity"
+      },
+      wgu: {
+        label: "WGU",
+        icon: "🎓",
+        executionFit: 1.1,
+        hours: 400,
+        tuition: 7400,
+        desc: "Competency-based, moderate structure, self-paced within terms"
+      },
+      umpi: {
+        label: "UMPI",
+        icon: "📘",
+        executionFit: 1.2,
+        hours: 420,
+        tuition: 9000,
+        desc: "Low cost, medium cadence rigidity, structured sessions"
+      },
+      mypath: {
+        label: "UMass Global MyPath",
+        icon: "🧭",
+        executionFit: 0.9,
+        hours: 360,
+        tuition: 9750,
+        desc: "High elasticity, interruption-tolerant, hyperfocus-compatible"
+      },
+      flexpath: {
+        label: "FlexPath",
+        icon: "⚡",
+        executionFit: 0.85,
+        hours: 340,
+        tuition: 10800,
+        desc: "Maximum elasticity, lower institutional signaling weight"
+      }
+    };
+
+    function Ddev(age) {
+      if (age <= 1) return 2.2;
+      if (age <= 2) return 2.0;
+      if (age <= 3) return 1.8;
+      if (age <= 4) return 1.6;
+      if (age <= 5) return 1.4;
+      if (age <= 6) return 1.1;
+      if (age <= 7) return 0.85;
+      if (age <= 8) return 0.65;
+      if (age <= 9) return 0.5;
+      if (age <= 11) return 0.35;
+      if (age <= 13) return 0.3;
+      return 0.2;
+    }
+
+    function D(age) {
+      return 0.3 + Ddev(age);
+    }
+
+    function dependentLoad(dependent, yearsFromNow) {
+      const futureAge = dependent.age + yearsFromNow;
+      const standardLoad = D(futureAge);
+      if (!dependent.advanced) return dependent.care * standardLoad;
+      const elevatedActive = futureAge < dependent.careEndAge;
+      const careNow = elevatedActive ? dependent.care : dependent.longTermCare;
+      return careNow * standardLoad;
+    }
+
+    function Afamily(dependents, yearsFromNow, rho = 0.3) {
+      const loads = dependents.map(dep => dependentLoad(dep, yearsFromNow));
+      const individual = loads.reduce((sum, load) => sum + load, 0);
+      let interaction = 0;
+      for (let j = 0; j < loads.length; j += 1) {
+        for (let k = j + 1; k < loads.length; k += 1) {
+          interaction += loads[j] * loads[k];
+        }
+      }
+      return individual + rho * interaction;
+    }
+
+    function Rt(year) {
+      return Math.min(1.0, 0.55 + 0.045 * year);
+    }
+
+    function computeNV(params, yearsFromNow) {
+      const { dependents, ms, s, executionFit, hours, tuition, Cb, Fs, Ts, fieldRisk } = params;
+      const af = Afamily(dependents, yearsFromNow);
+      const prepHours = 80;
+      const prepExecutionFit = 0.85;
+      const Aprep = af * 0.4;
+      const familyCost = ms * s * hours * executionFit * af;
+      const prepCost = ms * s * prepHours * prepExecutionFit * Aprep;
+      const subscriptionLeakage = Fs * Ts;
+      const totalCost = tuition + Cb + familyCost + prepCost + subscriptionLeakage;
+      const rt = Rt(yearsFromNow);
+      const lossMagnitude = 180000;
+      const degreeProtection = 0.35;
+      const benefit = fieldRisk * rt * lossMagnitude * degreeProtection;
+
+      return { nv: benefit - totalCost, benefit, totalCost, familyCost, prepCost, tuition, Cb, subscriptionLeakage, af, rt };
+    }
+
+    function moneyShort(value) {
+      const rounded = Math.round(value / 1000);
+      return `${value >= 0 ? "+" : ""}${rounded}k`;
+    }
+
+    function SliderRow({ label, sublabel, min, max, step, value, onChange, format }) {
+      return (
+        <div style={{ marginBottom: "1.4rem" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "0.35rem", gap: "1rem" }}>
+            <span style={{ fontSize: "0.78rem", color: "#c9b89a", letterSpacing: "0.04em", textTransform: "uppercase" }}>{label}</span>
+            <span style={{ fontSize: "1.05rem", fontFamily: "monospace", color: "#f0e6d3", fontWeight: 600 }}>{format(value)}</span>
+          </div>
+          {sublabel && <div style={{ fontSize: "0.68rem", color: "#7a6f5e", marginBottom: "0.4rem", fontStyle: "italic" }}>{sublabel}</div>}
+          <input type="range" min={min} max={max} step={step} value={value} onChange={event => onChange(parseFloat(event.target.value))} />
+        </div>
+      );
+    }
+
+    function CustomTooltip({ active, payload, label }) {
+      if (!active || !payload || !payload.length) return null;
+      return (
+        <div style={{ background: "#1a1510", border: "1px solid #3d3020", padding: "0.75rem 1rem", borderRadius: "4px", fontSize: "0.75rem", fontFamily: "monospace" }}>
+          <div style={{ color: "#c9b89a", marginBottom: "0.4rem" }}>Year +{label}</div>
+          {payload.map((p, i) => (
+            <div key={i} style={{ color: p.color, marginBottom: "0.2rem" }}>
+              {p.name}: {typeof p.value === "number" && Math.abs(p.value) > 1000 ? moneyShort(p.value) : p.value}
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    function App() {
+      const [dependents, setDependents] = useState([
+        { age: 3, care: 1, advanced: false, careEndAge: 18, longTermCare: 1 },
+        { age: 5, care: 1, advanced: false, careEndAge: 18, longTermCare: 1 }
+      ]);
+      const [ms, setMs] = useState(2.2);
+      const [s, setS] = useState(55);
+      const [preset, setPreset] = useState("wgu");
+      const [executionFit, setExecutionFit] = useState(PRESETS.wgu.executionFit);
+      const [hours, setHours] = useState(PRESETS.wgu.hours);
+      const [tuition, setTuition] = useState(PRESETS.wgu.tuition);
+      const [Cb, setCb] = useState(8000);
+      const [fieldRisk, setFieldRisk] = useState(0.65);
+      const Fs = 99;
+      const Ts = 18;
+
+      const applyPreset = key => {
+        setPreset(key);
+        setExecutionFit(PRESETS[key].executionFit);
+        setHours(PRESETS[key].hours);
+        setTuition(PRESETS[key].tuition);
+      };
+
+      const timelineData = useMemo(() => {
+        return Array.from({ length: 11 }, (_, i) => {
+          const result = computeNV({ dependents, ms, s, executionFit, hours, tuition, Cb, Fs, Ts, fieldRisk }, i);
+          return {
+            year: i,
+            nv: Math.round(result.nv),
+            benefit: Math.round(result.benefit),
+            familyCost: Math.round(result.familyCost),
+            prepCost: Math.round(result.prepCost),
+            totalCost: Math.round(result.totalCost),
+            af: parseFloat(result.af.toFixed(2)),
+            rt: parseFloat(result.rt.toFixed(2)),
+            tuition: result.tuition
+          };
+        });
+      }, [dependents, ms, s, executionFit, hours, tuition, Cb, fieldRisk]);
+
+      const optimalYear = useMemo(() => {
+        let best = 0;
+        let bestNV = -Infinity;
+        timelineData.forEach(d => {
+          if (d.nv > bestNV) {
+            bestNV = d.nv;
+            best = d.year;
+          }
+        });
+        return best;
+      }, [timelineData]);
+
+      const nowNV = timelineData[0] ? timelineData[0].nv : 0;
+      const optimalNV = timelineData[optimalYear] ? timelineData[optimalYear].nv : 0;
+      const gain = optimalNV - nowNV;
+      const verdict = optimalYear === 0
+        ? { label: "ACT NOW", color: "#4caf7d", sub: "Your window is open. Conditions favor enrollment." }
+        : optimalYear <= 2
+          ? { label: "SOON", color: "#c9813a", sub: `Optimal window opens in ~${optimalYear} year${optimalYear > 1 ? "s" : ""}. Begin preparing.` }
+          : { label: "NOT YET", color: "#8b5cf6", sub: `Hold pattern for ~${optimalYear} years. Life load still dominates.` };
+
+      const addDependent = () => setDependents(current => [...current, { age: 1, care: 1, advanced: false, careEndAge: 18, longTermCare: 1 }]);
+      const removeDependent = index => setDependents(current => current.filter((_, j) => j !== index));
+      const updateDependent = (index, patch) => setDependents(current => current.map((dep, j) => j === index ? { ...dep, ...patch } : dep));
+
+      return (
+        <div>
+          <header className="page-shell" style={{ borderBottom: "1px solid #2a2218", padding: "2.5rem 2rem 2rem", maxWidth: "980px", margin: "0 auto" }}>
+            <div style={{ fontSize: "0.7rem", letterSpacing: "0.2em", color: "#7a6f5e", textTransform: "uppercase", marginBottom: "0.75rem", fontFamily: "monospace" }}>Education Decision Calculator</div>
+            <h1 style={{ fontSize: "clamp(1.7rem, 4vw, 2.7rem)", fontWeight: 400, lineHeight: 1.2, margin: 0, color: "#f0e6d3" }}>Should You Go Back<br /><span style={{ color: "#c9813a" }}>To School Right Now?</span></h1>
+            <p style={{ fontSize: "0.95rem", color: "#8a7d6a", marginTop: "1rem", maxWidth: "620px", lineHeight: 1.7, fontStyle: "italic" }}>A dynamic model for comparing education timing, program topology, life load, and career-risk assumptions. Adjust the inputs and watch the optimal window move.</p>
+          </header>
+
+          <main className="page-shell" style={{ maxWidth: "980px", margin: "0 auto", padding: "0 2rem 4rem" }}>
+            <section style={{ margin: "2rem 0", padding: "1.5rem 2rem", border: `1px solid ${verdict.color}44`, borderLeft: `3px solid ${verdict.color}`, background: `${verdict.color}0a`, borderRadius: "2px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
+                <span style={{ fontSize: "1.4rem", fontFamily: "monospace", color: verdict.color, fontWeight: 700, letterSpacing: "0.1em" }}>{verdict.label}</span>
+                <span style={{ fontSize: "0.88rem", color: "#c9b89a", fontStyle: "italic" }}>{verdict.sub}</span>
+                {gain > 1000 && <span style={{ marginLeft: "auto", fontSize: "0.75rem", color: "#7a6f5e", fontFamily: "monospace" }}>waiting gains +${Math.round(gain / 1000)}k NV</span>}
+              </div>
+            </section>
+
+            <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "2rem" }}>
+              <div>
+                <div style={{ marginBottom: "2rem" }}>
+                  <div style={{ fontSize: "0.7rem", letterSpacing: "0.15em", color: "#7a6f5e", textTransform: "uppercase", marginBottom: "1rem", fontFamily: "monospace" }}>Dependents / life load</div>
+                  {dependents.map((dep, i) => (
+                    <div key={i} style={{ border: "1px solid #2a2218", background: "#14110d", padding: "0.85rem", borderRadius: "3px", marginBottom: "0.85rem" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "0.75rem" }}>
+                        <span style={{ fontSize: "0.75rem", color: "#7a6f5e", fontFamily: "monospace", width: "88px" }}>Dependent {i + 1}</span>
+                        <input type="range" min="0" max="17" step="1" value={dep.age} onChange={event => updateDependent(i, { age: parseInt(event.target.value, 10) })} />
+                        <span style={{ fontSize: "0.9rem", color: "#f0e6d3", fontFamily: "monospace", width: "48px" }}>age {dep.age}</span>
+                        {dependents.length > 1 && <button onClick={() => removeDependent(i)} style={{ background: "none", border: "1px solid #3d3020", color: "#7a6f5e", cursor: "pointer", borderRadius: "2px", padding: "0.1rem 0.4rem" }}>×</button>}
+                      </div>
+                      <SliderRow label="Care intensity" sublabel="1.0 = typical baseline; higher = elevated support needs" min={0.5} max={4} step={0.1} value={dep.care} onChange={value => updateDependent(i, { care: value })} format={v => `${v.toFixed(1)}×`} />
+                      <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.75rem", color: "#7a6f5e", fontFamily: "monospace" }}>
+                        <input type="checkbox" checked={dep.advanced} onChange={event => updateDependent(i, { advanced: event.target.checked })} /> Advanced care duration
+                      </label>
+                      {dep.advanced && (
+                        <div style={{ marginTop: "0.9rem", borderTop: "1px solid #2a2218", paddingTop: "0.9rem" }}>
+                          <SliderRow label="Elevated care until age" sublabel="After this age, long-term care intensity applies" min={dep.age} max={30} step={1} value={dep.careEndAge} onChange={value => updateDependent(i, { careEndAge: value })} format={v => `age ${v}`} />
+                          <SliderRow label="Long-term care floor" sublabel="Care intensity after elevated duration ends" min={0.5} max={4} step={0.1} value={dep.longTermCare} onChange={value => updateDependent(i, { longTermCare: value })} format={v => `${v.toFixed(1)}×`} />
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  {dependents.length < 5 && <button onClick={addDependent} style={{ background: "none", border: "1px solid #3d3020", color: "#7a6f5e", cursor: "pointer", borderRadius: "2px", padding: "0.35rem 0.75rem", fontSize: "0.72rem", fontFamily: "monospace", letterSpacing: "0.08em" }}>+ add dependent</button>}
+                </div>
+
+                <div style={{ borderTop: "1px solid #2a2218", paddingTop: "1.5rem" }}>
+                  <SliderRow label="Hourly value" sublabel="Your effective hourly rate or value estimate" min={20} max={200} step={5} value={s} onChange={setS} format={v => `$${v}/hr`} />
+                  <SliderRow label="Life time multiplier" sublabel="How much you value protected life/family time vs. work time" min={1} max={4} step={0.1} value={ms} onChange={setMs} format={v => `${v.toFixed(1)}×`} />
+                  <SliderRow label="Field credential risk" sublabel="How actively your field filters on credentials" min={0.1} max={1} step={0.05} value={fieldRisk} onChange={setFieldRisk} format={v => `${Math.round(v * 100)}%`} />
+                  <SliderRow label="Burnout / identity cost" sublabel="Estimated psychological friction of taking this on" min={0} max={30000} step={1000} value={Cb} onChange={setCb} format={v => `$${(v / 1000).toFixed(0)}k`} />
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontSize: "0.7rem", letterSpacing: "0.15em", color: "#7a6f5e", textTransform: "uppercase", marginBottom: "1rem", fontFamily: "monospace" }}>Program Topology</div>
+                <div className="preset-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem", marginBottom: "1.25rem" }}>
+                  {Object.entries(PRESETS).map(([key, p]) => (
+                    <button key={key} onClick={() => applyPreset(key)} style={{ background: preset === key ? "#2a1f10" : "none", border: `1px solid ${preset === key ? "#c9813a" : "#2a2218"}`, color: preset === key ? "#f0e6d3" : "#7a6f5e", cursor: "pointer", borderRadius: "2px", padding: "0.55rem 0.65rem", fontSize: "0.72rem", fontFamily: "monospace", textAlign: "left" }}>
+                      <span style={{ marginRight: "0.4rem" }}>{p.icon}</span>{p.label}
+                    </button>
+                  ))}
+                </div>
+                <div style={{ fontSize: "0.72rem", color: "#5a5040", fontStyle: "italic", marginBottom: "1.5rem", lineHeight: 1.6 }}>{PRESETS[preset].desc}</div>
+                <SliderRow label="Execution fit" sublabel="How efficiently you navigate this program's requirements vs. neutral baseline" min={0.5} max={2} step={0.05} value={executionFit} onChange={setExecutionFit} format={v => `${v.toFixed(2)}×`} />
+                <SliderRow label="Program hours" sublabel="Total execution hours to completion" min={200} max={600} step={20} value={hours} onChange={setHours} format={v => `${v}h`} />
+                <SliderRow label="Total tuition" sublabel="Full program cost including fees" min={2000} max={50000} step={500} value={tuition} onChange={setTuition} format={v => `$${(v / 1000).toFixed(1)}k`} />
+
+                <div style={{ marginTop: "1.25rem", background: "#14110d", border: "1px solid #2a2218", borderRadius: "3px", padding: "1rem" }}>
+                  <div style={{ fontSize: "0.65rem", letterSpacing: "0.12em", color: "#5a5040", textTransform: "uppercase", fontFamily: "monospace", marginBottom: "0.75rem" }}>Cost Breakdown — Today</div>
+                  {[["Tuition", timelineData[0].tuition], ["Life-load cost", timelineData[0].familyCost], ["Prep cost", timelineData[0].prepCost], ["Burnout", Cb], ["Subscription leakage", Fs * Ts]].map(([label, value]) => (
+                    <div key={label} style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.4rem" }}>
+                      <span style={{ fontSize: "0.73rem", color: "#7a6f5e" }}>{label}</span>
+                      <span style={{ fontSize: "0.73rem", color: "#c9b89a", fontFamily: "monospace" }}>${Math.round(value / 1000)}k</span>
+                    </div>
+                  ))}
+                  <div style={{ borderTop: "1px solid #2a2218", marginTop: "0.5rem", paddingTop: "0.5rem", display: "flex", justifyContent: "space-between" }}>
+                    <span style={{ fontSize: "0.73rem", color: "#c9b89a" }}>Net Value</span>
+                    <span style={{ fontSize: "0.82rem", color: nowNV > 0 ? "#4caf7d" : "#e05c5c", fontFamily: "monospace", fontWeight: 600 }}>{nowNV > 0 ? "+" : ""}{Math.round(nowNV / 1000)}k</span>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section style={{ marginTop: "2.5rem", borderTop: "1px solid #2a2218", paddingTop: "2rem" }}>
+              <div style={{ fontSize: "0.7rem", letterSpacing: "0.15em", color: "#7a6f5e", textTransform: "uppercase", marginBottom: "1.5rem", fontFamily: "monospace" }}>Timing Window Analysis</div>
+              <div style={{ marginBottom: "2.5rem" }}>
+                <div style={{ fontSize: "0.78rem", color: "#8a7d6a", marginBottom: "0.75rem", fontStyle: "italic" }}>Net value of enrolling at each future year</div>
+                <ResponsiveContainer width="100%" height={230}>
+                  <AreaChart data={timelineData}>
+                    <defs><linearGradient id="nvGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#c9813a" stopOpacity={0.25} /><stop offset="95%" stopColor="#c9813a" stopOpacity={0} /></linearGradient></defs>
+                    <XAxis dataKey="year" tick={{ fill: "#5a5040", fontSize: 11, fontFamily: "monospace" }} tickFormatter={v => `+${v}yr`} axisLine={{ stroke: "#2a2218" }} tickLine={false} />
+                    <YAxis tick={{ fill: "#5a5040", fontSize: 11, fontFamily: "monospace" }} tickFormatter={v => `${v > 0 ? "+" : ""}${Math.round(v / 1000)}k`} axisLine={false} tickLine={false} />
+                    <Tooltip content={<CustomTooltip />} />
+                    <ReferenceLine y={0} stroke="#3d3020" strokeDasharray="3 3" />
+                    {optimalYear > 0 && <ReferenceLine x={optimalYear} stroke="#c9813a" strokeDasharray="4 2" label={{ value: "optimal", fill: "#c9813a", fontSize: 10, fontFamily: "monospace" }} />}
+                    <Area type="monotone" dataKey="nv" name="Net Value" stroke="#c9813a" fill="url(#nvGrad)" strokeWidth={2} dot={false} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "2rem" }}>
+                <div>
+                  <div style={{ fontSize: "0.78rem", color: "#8a7d6a", marginBottom: "0.75rem", fontStyle: "italic" }}>Life/dependent load A(t)</div>
+                  <ResponsiveContainer width="100%" height={170}>
+                    <AreaChart data={timelineData}>
+                      <defs><linearGradient id="afGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.2} /><stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} /></linearGradient></defs>
+                      <XAxis dataKey="year" tick={{ fill: "#5a5040", fontSize: 10, fontFamily: "monospace" }} tickFormatter={v => `+${v}yr`} axisLine={{ stroke: "#2a2218" }} tickLine={false} />
+                      <YAxis tick={{ fill: "#5a5040", fontSize: 10, fontFamily: "monospace" }} axisLine={false} tickLine={false} />
+                      <Tooltip content={<CustomTooltip />} />
+                      <Area type="monotone" dataKey="af" name="Life Load" stroke="#8b5cf6" fill="url(#afGrad)" strokeWidth={2} dot={false} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+                <div>
+                  <div style={{ fontSize: "0.78rem", color: "#8a7d6a", marginBottom: "0.75rem", fontStyle: "italic" }}>Institutional reliance R(t)</div>
+                  <ResponsiveContainer width="100%" height={170}>
+                    <AreaChart data={timelineData}>
+                      <defs><linearGradient id="rtGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#4caf7d" stopOpacity={0.2} /><stop offset="95%" stopColor="#4caf7d" stopOpacity={0} /></linearGradient></defs>
+                      <XAxis dataKey="year" tick={{ fill: "#5a5040", fontSize: 10, fontFamily: "monospace" }} tickFormatter={v => `+${v}yr`} axisLine={{ stroke: "#2a2218" }} tickLine={false} />
+                      <YAxis tick={{ fill: "#5a5040", fontSize: 10, fontFamily: "monospace" }} tickFormatter={v => v.toFixed(1)} axisLine={false} tickLine={false} />
+                      <Tooltip content={<CustomTooltip />} />
+                      <Area type="monotone" dataKey="rt" name="Inst. Reliance" stroke="#4caf7d" fill="url(#rtGrad)" strokeWidth={2} dot={false} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </section>
+
+            <footer style={{ marginTop: "3rem", borderTop: "1px solid #1a1510", paddingTop: "1.5rem", fontSize: "0.72rem", color: "#4a4030", fontStyle: "italic", lineHeight: 1.8 }}>
+              This framework models education as institutional-risk mitigation under life-load and execution-topology constraints. Execution fit reflects topology friction, not capability. Dependent care coefficients allow higher-support or long-duration care needs to be modeled without changing the default path. All dollar figures are present-value estimates and should be interpreted directionally.
+            </footer>
+          </main>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>
